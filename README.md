@@ -23,9 +23,11 @@ A complete, production-ready offline AI study assistant that converts study mate
 ## Installation
 
 ### 1. Clone or Download the Project
-```bash
-cd ai_flashcard_maker
-```
+  1.Clone the repository
+  2.Install requirements 
+  ```bash
+pip install -r requirements```
+
 
 ### 2. Create Virtual Environment (Recommended)
 ```bash
@@ -428,6 +430,8 @@ For issues or questions:
 - Weakness analysis
 - Production-ready code
 
+### Author
+**Zahoor Abbas**
 ---
 
 **Happy studying! 📚✨**
