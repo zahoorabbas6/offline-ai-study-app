@@ -9,8 +9,7 @@ A complete, production-ready offline AI study assistant that converts study mate
 - 🎯 **AI Flashcard Generation**: Automatically creates study flashcards from materials
 - 📝 **Exam Question Prediction**: Predicts likely exam questions with probability ranking
 - 🧪 **Practice Quizzes**: Generate interactive practice quizzes with difficulty scaling
-- 📊 **Weakness Analysis**: Identify weak topics and get personalized study recommendations
-- 🎨 **Clean GUI**: Intuitive Tkinter interface for easy access to all features
+- 🎨 **Clean GUI**: Intuitive PySide interface for easy access to all features
 - 📱 **CLI Interface**: Command-line interface for automation and advanced usage
 
 ## System Requirements
