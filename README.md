@@ -26,7 +26,8 @@ A complete, production-ready offline AI study assistant that converts study mate
   1.Clone the repository
   2.Install requirements 
   ```bash
-pip install -r requirements```
+pip install -r requirements
+```
 
 
 ### 2. Create Virtual Environment (Recommended)
