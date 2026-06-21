@@ -12,10 +12,8 @@ from utils import Logger, DataManager, TextCleaner
 from pdf_reader import FileReader, TextInputHandler
 from nlp_engine import NLPEngine
 from flashcards import FlashcardGenerator, FlashcardDeck
-from exam_predictor import ExamPredictor, ExamProbability, ExamQuestion, QuestionType
+from exam_predictor import ExamPredictor
 from quiz_generator import QuizGenerator, QuizDifficulty, WeaknessAnalyzer
-from local_ai import LocalAIManager
-from memory_store import StudyMemory
 
 
 class StudyEngineCore:
@@ -26,17 +24,11 @@ class StudyEngineCore:
         Logger.log("Initializing Offline AI Study Engine...")
         self.data_manager = DataManager()
         self.nlp_engine = NLPEngine()
-        self.local_ai = LocalAIManager()
-        self.memory = StudyMemory()
         self.current_text = ""
         self.current_deck = None
 
         if not self.nlp_engine.is_ready():
             Logger.log_warning("NLP Engine not fully initialized. Some features may be limited.")
-        if self.local_ai.status.active:
-            Logger.log(f"Local AI mode enabled with Ollama model: {self.local_ai.status.model}")
-        else:
-            Logger.log_warning(self.local_ai.status.message)
 
     def load_text(self, source: str) -> bool:
         """
@@ -59,13 +51,6 @@ class StudyEngineCore:
 
         if text:
             self.current_text = text
-            summary = ""
-            try:
-                if self.nlp_engine.is_ready():
-                    summary = self.nlp_engine.generate_summary(text, sentence_count=3)
-            except Exception:
-                summary = text[:500]
-            self.memory.add_document(text, source=str(source_path) if source_path.exists() else "raw_text", summary=summary)
             Logger.log(f"Loaded {len(text)} characters of text")
             return True
 
@@ -86,27 +71,17 @@ class StudyEngineCore:
             Logger.log_error("No text loaded")
             return None
 
-        if not self.nlp_engine.is_ready() and not self.local_ai.is_active():
+        if not self.nlp_engine.is_ready():
             Logger.log_error("NLP Engine not ready")
             return None
 
         Logger.log(f"Generating {num_cards} flashcards...")
 
-        cards = []
-        if self.local_ai.is_active():
-            memory_context = self.memory.build_context(self.current_text)
-            ai_cards = self.local_ai.generate_flashcards(self.current_text, num_cards, memory_context)
-            cards = self._flashcards_from_dicts(ai_cards)
-            if cards:
-                Logger.log(f"Generated {len(cards)} flashcards with local AI")
-
-        if not cards:
-            generator = FlashcardGenerator(self.nlp_engine)
-            cards = generator.generate_all(self.current_text, num_cards=num_cards)
+        generator = FlashcardGenerator(self.nlp_engine)
+        cards = generator.generate_all(self.current_text, num_cards=num_cards)
 
         self.current_deck = FlashcardDeck("Study Deck")
         self.current_deck.add_cards(cards)
-        self.memory.add_flashcards(self.current_deck.to_dict_list())
 
         Logger.log(f"Successfully generated {len(cards)} flashcards")
         return self.current_deck
@@ -125,25 +100,14 @@ class StudyEngineCore:
             Logger.log_error("No text loaded")
             return None
 
-        if not self.nlp_engine.is_ready() and not self.local_ai.is_active():
+        if not self.nlp_engine.is_ready():
             Logger.log_error("NLP Engine not ready")
             return None
 
         Logger.log(f"Predicting {num_questions} exam questions...")
 
-        questions = []
-        if self.local_ai.is_active():
-            memory_context = self.memory.build_context(self.current_text)
-            ai_questions = self.local_ai.generate_exam_questions(self.current_text, num_questions, memory_context)
-            questions = self._exam_questions_from_dicts(ai_questions)
-            if questions:
-                Logger.log(f"Generated {len(questions)} exam questions with local AI")
-
-        if not questions:
-            predictor = ExamPredictor(self.nlp_engine)
-            questions = predictor.predict_questions(self.current_text, num_questions=num_questions)
-
-        self.memory.add_exam_questions([question.to_dict() for question in questions])
+        predictor = ExamPredictor(self.nlp_engine)
+        questions = predictor.predict_questions(self.current_text, num_questions=num_questions)
 
         Logger.log(f"Generated {len(questions)} predicted exam questions")
         return questions
@@ -189,19 +153,6 @@ class StudyEngineCore:
             return None
 
         return quiz
-
-    def chat(self, message: str) -> str:
-        """Answer a chat request only when Ollama is active."""
-        if not self.local_ai.is_active():
-            return "Full AI Chat Feature requires Ollama to be installed and running locally."
-
-        response = self.local_ai.chat(
-            message,
-            current_text=self.current_text,
-            memory_context=self.memory.build_context(self.current_text),
-        )
-        self.memory.add_chat_turn(message, response)
-        return response
 
     def export_flashcards(self, filename: Optional[str] = None) -> Optional[str]:
         """
@@ -260,42 +211,6 @@ class StudyEngineCore:
                     print(f"{key}: {value}")
 
         print("=" * 50 + "\n")
-
-    @staticmethod
-    def _flashcards_from_dicts(cards: List[dict]) -> List:
-        from flashcards import Difficulty, Flashcard
-
-        result = []
-        for card in cards:
-            difficulty = Difficulty.__members__.get(card.get("difficulty", "MEDIUM"), Difficulty.MEDIUM)
-            result.append(
-                Flashcard(
-                    question=card.get("question", ""),
-                    answer=card.get("answer", ""),
-                    tags=card.get("tags", []) if isinstance(card.get("tags"), list) else [],
-                    difficulty=difficulty,
-                    source_sentence=card.get("source"),
-                )
-            )
-        return [card for card in result if card.question and card.answer]
-
-    @staticmethod
-    def _exam_questions_from_dicts(questions: List[dict]) -> List[ExamQuestion]:
-        type_by_value = {item.value: item for item in QuestionType}
-        result = []
-        for question in questions:
-            result.append(
-                ExamQuestion(
-                    question=question.get("question", ""),
-                    question_type=type_by_value.get(question.get("type"), QuestionType.SHORT_ANSWER),
-                    probability=ExamProbability.__members__.get(question.get("probability", "MEDIUM"), ExamProbability.MEDIUM),
-                    topic=question.get("topic", "General"),
-                    reasoning=question.get("reasoning", ""),
-                    answer_key=question.get("answer") or "See study material.",
-                    options=question.get("options") or [],
-                )
-            )
-        return [question for question in result if question.question]
 
 
 class CLIInterface:

@@ -9,27 +9,8 @@ A complete, production-ready offline AI study assistant that converts study mate
 - 🎯 **AI Flashcard Generation**: Automatically creates study flashcards from materials
 - 📝 **Exam Question Prediction**: Predicts likely exam questions with probability ranking
 - 🧪 **Practice Quizzes**: Generate interactive practice quizzes with difficulty scaling
-- 📊 **Weakness Analysis**: Identify weak topics and get personalized study recommendations
-- 🎨 **Clean GUI**: Intuitive Tkinter interface for easy access to all features
+- 🎨 **Clean GUI**: Intuitive PySide interface for easy access to all features
 - 📱 **CLI Interface**: Command-line interface for automation and advanced usage
-
-## Local AI, Chat, and Memory
-
-The app automatically checks for Ollama on startup and before local AI requests.
-
-- If Ollama is installed, running at `http://localhost:11434`, and has a local model, Local AI Mode is enabled.
-- When Local AI Mode is enabled, flashcards and exam questions are enhanced through Ollama with memory context.
-- The full AI chat tab is only usable when Ollama is active.
-- If Ollama is missing, stopped, or fails during a request, the app uses the existing offline fallback generators and stays usable.
-- Persistent memory is stored locally in `study_data/study_memory.json` and safely resets if the file is corrupted.
-
-To enable the full chat feature:
-
-```bash
-ollama serve
-ollama pull llama3.2
-python main.py
-```
 
 ## System Requirements
 
@@ -41,9 +22,12 @@ python main.py
 ## Installation
 
 ### 1. Clone or Download the Project
-```bash
-cd ai_flashcard_maker
+  1.Clone the repository
+  2.Install requirements 
+  ```bash
+pip install -r requirements
 ```
+
 
 ### 2. Create Virtual Environment (Recommended)
 ```bash
@@ -446,6 +430,8 @@ For issues or questions:
 - Weakness analysis
 - Production-ready code
 
+### Author
+**Zahoor Abbas**
 ---
 
 **Happy studying! 📚✨**
