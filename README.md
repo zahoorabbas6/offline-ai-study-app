@@ -13,6 +13,24 @@ A complete, production-ready offline AI study assistant that converts study mate
 - 🎨 **Clean GUI**: Intuitive Tkinter interface for easy access to all features
 - 📱 **CLI Interface**: Command-line interface for automation and advanced usage
 
+## Local AI, Chat, and Memory
+
+The app automatically checks for Ollama on startup and before local AI requests.
+
+- If Ollama is installed, running at `http://localhost:11434`, and has a local model, Local AI Mode is enabled.
+- When Local AI Mode is enabled, flashcards and exam questions are enhanced through Ollama with memory context.
+- The full AI chat tab is only usable when Ollama is active.
+- If Ollama is missing, stopped, or fails during a request, the app uses the existing offline fallback generators and stays usable.
+- Persistent memory is stored locally in `study_data/study_memory.json` and safely resets if the file is corrupted.
+
+To enable the full chat feature:
+
+```bash
+ollama serve
+ollama pull llama3.2
+python main.py
+```
+
 ## System Requirements
 
 - **Python**: 3.8 or higher

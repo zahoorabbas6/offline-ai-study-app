@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QThread, QSize, Qt, Signal
 from PySide6.QtGui import QAction, QFont
 from PySide6.QtWidgets import (
     QApplication,
@@ -37,6 +37,35 @@ from nlp_engine import NLPEngine
 from flashcards import Difficulty, Flashcard, FlashcardDeck, FlashcardGenerator
 from exam_predictor import ExamPredictor, ExamProbability, ExamQuestion, QuestionType
 from quiz_generator import QuizGenerator, WeaknessAnalyzer
+from local_ai import LocalAIManager
+from memory_store import StudyMemory
+
+
+class ChatWorker(QThread):
+    """Runs local AI chat without blocking the Qt event loop."""
+
+    response_ready = Signal(str)
+
+    def __init__(self, ai_manager, memory, message: str, current_text: str):
+        super().__init__()
+        self.ai_manager = ai_manager
+        self.memory = memory
+        self.message = message
+        self.current_text = current_text
+
+    def run(self) -> None:
+        try:
+            response = self.ai_manager.chat(
+                self.message,
+                current_text=self.current_text,
+                memory_context=self.memory.build_context(self.current_text),
+            )
+            self.memory.add_chat_turn(self.message, response)
+            self.response_ready.emit(response)
+        except Exception:
+            self.response_ready.emit(
+                "Local AI is unavailable right now. The core study tools still work with the offline fallback system."
+            )
 
 
 class PremiumStudyApp(QMainWindow):
@@ -48,6 +77,9 @@ class PremiumStudyApp(QMainWindow):
         self.resize(1280, 860)
 
         self.data_manager = DataManager()
+        self.memory = StudyMemory()
+        self.ai_manager = LocalAIManager()
+        self.local_ai_active = self.ai_manager.status.active
         self.nlp_engine = None
         self.current_text = ""
         self.current_deck = None
@@ -58,11 +90,15 @@ class PremiumStudyApp(QMainWindow):
         self.splitter = None
         self.saved_group = None
         self.saved_files_list = None
+        self.chat_worker = None
 
         self._create_actions()
         self._build_ui()
         self._apply_style()
-        self._update_status("Ready")
+        if self.local_ai_active:
+            self._update_status(f"Ready - Local AI enabled: {self.ai_manager.status.model}")
+        else:
+            self._update_status(f"Ready - fallback mode. {self.ai_manager.status.message}")
         self._refresh_saved_files()
 
     def _create_actions(self) -> None:
@@ -246,6 +282,13 @@ class PremiumStudyApp(QMainWindow):
         self.quiz_panel = self._build_quiz_panel()
         self.result_tabs.addTab(self.quiz_panel, "Quiz")
 
+        if self.local_ai_active:
+            self.chat_panel = self._build_chat_panel()
+            self.result_tabs.addTab(self.chat_panel, "AI Chat")
+        else:
+            self.chat_notice_panel = self._build_chat_notice_panel()
+            self.result_tabs.addTab(self.chat_notice_panel, "AI Chat")
+
         self.saved_group = QGroupBox("Saved Study Items")
         saved_layout = QVBoxLayout(self.saved_group)
         self.saved_files_list = QListWidget()
@@ -256,6 +299,47 @@ class PremiumStudyApp(QMainWindow):
         right_layout.addWidget(self.result_tabs, 6)
         right_layout.addWidget(self.saved_group, 1)
         return left_panel, right_panel
+
+    def _build_chat_panel(self) -> QWidget:
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(10)
+
+        self.chat_history_display = QTextEdit()
+        self.chat_history_display.setReadOnly(True)
+        self.chat_history_display.setMinimumHeight(300)
+        self.chat_history_display.setPlaceholderText("Local AI chat history")
+        layout.addWidget(self.chat_history_display, 1)
+
+        self.chat_input = QTextEdit()
+        self.chat_input.setMinimumHeight(90)
+        self.chat_input.setMaximumHeight(130)
+        self.chat_input.setPlaceholderText("Ask about the material, request flashcards, or create quiz questions...")
+        layout.addWidget(self.chat_input)
+
+        button_row = QHBoxLayout()
+        self.chat_send_button = QPushButton("Send")
+        self.chat_send_button.setObjectName("PrimaryButton")
+        self.chat_send_button.clicked.connect(self.send_chat_message)
+        self.chat_clear_button = QPushButton("Clear Chat")
+        self.chat_clear_button.clicked.connect(self.clear_chat)
+        button_row.addWidget(self.chat_send_button)
+        button_row.addWidget(self.chat_clear_button)
+        layout.addLayout(button_row)
+        return panel
+
+    def _build_chat_notice_panel(self) -> QWidget:
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 18, 18, 18)
+        notice = QLabel("⚠️ Full AI Chat Feature requires Ollama to be installed and running locally.")
+        notice.setWordWrap(True)
+        notice.setObjectName("MutedLabel")
+        notice.setFont(QFont("Segoe UI", 13))
+        layout.addWidget(notice)
+        layout.addStretch(1)
+        return panel
 
     def _build_flashcard_editor(self) -> QWidget:
         panel = QWidget()
@@ -505,9 +589,23 @@ class PremiumStudyApp(QMainWindow):
         self.current_text = ""
         self._update_status("Input cleared")
 
+    def _remember_document(self, text: str, source: str) -> None:
+        try:
+            summary = ""
+            nlp_engine = self._get_nlp_engine()
+            if nlp_engine and nlp_engine.is_ready():
+                summary = nlp_engine.generate_summary(text, sentence_count=3)
+            self.memory.add_document(text, source=source, summary=summary)
+        except Exception:
+            self.memory.add_document(text, source=source, summary=text[:500])
+
     def _refresh_saved_files(self) -> None:
         self.saved_files_list.clear()
-        files = self.data_manager.list_saved_files("*.json")
+        files = [
+            filename
+            for filename in self.data_manager.list_saved_files("*.json")
+            if not filename.startswith("study_memory")
+        ]
         for filename in sorted(files, reverse=True):
             self.saved_files_list.addItem(filename)
 
@@ -555,6 +653,7 @@ class PremiumStudyApp(QMainWindow):
             if text:
                 self.text_input.setPlainText(text)
                 self.current_text = text
+                self._remember_document(text, str(Path(filepath).name))
                 self._update_status(f"Loaded PDF: {Path(filepath).name}")
             else:
                 QMessageBox.critical(self, "Read Error", "Unable to read the selected PDF file.")
@@ -566,6 +665,7 @@ class PremiumStudyApp(QMainWindow):
             if text:
                 self.text_input.setPlainText(text)
                 self.current_text = text
+                self._remember_document(text, str(Path(filepath).name))
                 self._update_status(f"Loaded file: {Path(filepath).name}")
 
     def generate_flashcards(self) -> None:
@@ -575,21 +675,39 @@ class PremiumStudyApp(QMainWindow):
             return
 
         card_count = self.flashcard_count_input.value()
-        self._update_status("Generating offline flashcards...")
+        self._update_status("Generating flashcards...")
         QApplication.processEvents()
 
         nlp_engine = self._get_nlp_engine()
-        if not nlp_engine.is_ready():
+        if not nlp_engine.is_ready() and not self.ai_manager.is_active():
             QMessageBox.critical(self, "NLP Error", "NLP engine not initialized.")
             self._update_status("NLP engine unavailable")
             return
 
         self.current_text = text
-        generator = FlashcardGenerator(nlp_engine)
-        cards = generator.generate_all(text, num_cards=card_count)
+        cards = []
+        if self.ai_manager.is_active():
+            self._update_status("Generating local AI flashcards...")
+            QApplication.processEvents()
+            ai_cards = self.ai_manager.generate_flashcards(
+                text,
+                card_count,
+                self.memory.build_context(text),
+            )
+            cards = self._flashcards_from_dicts(ai_cards)
+
+        if not cards:
+            self._update_status("Generating offline fallback flashcards...")
+            QApplication.processEvents()
+            generator = FlashcardGenerator(nlp_engine)
+            cards = generator.generate_all(text, num_cards=card_count)
+
         self.current_deck = FlashcardDeck("Premium Offline Deck")
         self.current_deck.add_cards(cards)
         self.current_flashcards = self.current_deck.to_dict_list()
+        summary = nlp_engine.generate_summary(text, sentence_count=3) if nlp_engine.is_ready() else text[:500]
+        self.memory.add_document(text, source="current_input", summary=summary)
+        self.memory.add_flashcards(self.current_flashcards)
         self._refresh_flashcard_editor()
 
         output_lines = [f"Generated {len(cards)} flashcards:\n"]
@@ -602,8 +720,9 @@ class PremiumStudyApp(QMainWindow):
             output_lines.append(f"...and {len(cards) - 12} more cards")
 
         self.output_display.setPlainText("\n".join(output_lines))
-        self.summary_display.setPlainText(nlp_engine.generate_summary(text, sentence_count=5))
-        self._render_concepts(text)
+        self.summary_display.setPlainText(nlp_engine.generate_summary(text, sentence_count=5) if nlp_engine.is_ready() else summary)
+        if nlp_engine.is_ready():
+            self._render_concepts(text)
         self.result_tabs.setCurrentWidget(self.flashcards_panel)
         self._update_status(f"Generated {len(cards)} flashcards")
 
@@ -614,22 +733,46 @@ class PremiumStudyApp(QMainWindow):
             return
 
         question_count = self.exam_count_input.value()
-        self._update_status("Predicting offline exam questions...")
+        self._update_status("Predicting exam questions...")
         QApplication.processEvents()
 
         nlp_engine = self._get_nlp_engine()
-        if not nlp_engine.is_ready():
+        if not nlp_engine.is_ready() and not self.ai_manager.is_active():
             QMessageBox.critical(self, "NLP Error", "NLP engine not initialized.")
             self._update_status("NLP engine unavailable")
             return
 
         self.current_text = text
-        predictor = ExamPredictor(nlp_engine)
-        questions = predictor.predict_questions(text, num_questions=question_count)
+        predictor = None
+        questions = []
+        if self.ai_manager.is_active():
+            self._update_status("Predicting with local AI...")
+            QApplication.processEvents()
+            ai_questions = self.ai_manager.generate_exam_questions(
+                text,
+                question_count,
+                self.memory.build_context(text),
+            )
+            questions = self._exam_questions_from_dicts(ai_questions)
+
+        if not questions:
+            self._update_status("Predicting with offline fallback...")
+            QApplication.processEvents()
+            predictor = ExamPredictor(nlp_engine)
+            questions = predictor.predict_questions(text, num_questions=question_count)
+
         self.current_exam_predictions = [question.to_dict() for question in questions]
+        summary = nlp_engine.generate_summary(text, sentence_count=3) if nlp_engine.is_ready() else text[:500]
+        self.memory.add_document(text, source="current_input", summary=summary)
+        self.memory.add_exam_questions(self.current_exam_predictions)
 
         output_lines = [f"Predicted {len(questions)} exam questions:\n"]
-        for index, question in enumerate(predictor.rank_by_probability()[:12], 1):
+        ranked_questions = predictor.rank_by_probability() if predictor else sorted(
+            questions,
+            key=lambda question: question.probability.value,
+            reverse=True,
+        )
+        for index, question in enumerate(ranked_questions[:12], 1):
             output_lines.append(f"{index}. [{question.probability.name}] {question.question_type.value}")
             output_lines.append(f"   Q: {question.question}")
             output_lines.append(f"   Topic: {question.topic}")
@@ -640,8 +783,9 @@ class PremiumStudyApp(QMainWindow):
             output_lines.append(f"...and {len(questions) - 12} more questions")
 
         self.output_display.setPlainText("\n".join(output_lines))
-        self.summary_display.setPlainText(nlp_engine.generate_summary(text, sentence_count=5))
-        self._render_concepts(text)
+        self.summary_display.setPlainText(nlp_engine.generate_summary(text, sentence_count=5) if nlp_engine.is_ready() else summary)
+        if nlp_engine.is_ready():
+            self._render_concepts(text)
         self.result_tabs.setCurrentWidget(self.output_display)
         self._update_status(f"Predicted {len(questions)} exam questions")
 
@@ -700,6 +844,42 @@ class PremiumStudyApp(QMainWindow):
             lines.append("- No evidence sentences ranked.")
 
         self.concepts_display.setPlainText("\n".join(lines))
+
+    def send_chat_message(self) -> None:
+        if not self.local_ai_active:
+            self.output_display.setPlainText("⚠️ Full AI Chat Feature requires Ollama to be installed and running locally.")
+            return
+
+        message = self.chat_input.toPlainText().strip()
+        if not message:
+            return
+
+        current_text = self.text_input.toPlainText().strip()
+        self.chat_input.clear()
+        self.chat_history_display.append(f"Student:\n{message}\n")
+        self.chat_history_display.append("AI:\nThinking locally...\n")
+        self.chat_send_button.setEnabled(False)
+        self._update_status("Local AI chat is responding...")
+
+        self.chat_worker = ChatWorker(self.ai_manager, self.memory, message, current_text)
+        self.chat_worker.response_ready.connect(self._chat_response_ready)
+        self.chat_worker.start()
+
+    def _chat_response_ready(self, response: str) -> None:
+        history = self.chat_history_display.toPlainText()
+        marker = "AI:\nThinking locally...\n"
+        if marker in history:
+            history = history.replace(marker, f"AI:\n{response}\n", 1)
+            self.chat_history_display.setPlainText(history)
+        else:
+            self.chat_history_display.append(f"AI:\n{response}\n")
+        self.chat_send_button.setEnabled(True)
+        self._update_status("Local AI chat ready")
+
+    def clear_chat(self) -> None:
+        if self.local_ai_active:
+            self.chat_history_display.clear()
+            self._update_status("Chat cleared")
 
     def export_flashcards(self) -> None:
         if not self.current_flashcards:
@@ -831,6 +1011,7 @@ class PremiumStudyApp(QMainWindow):
             return
 
         self.last_quiz_results = self.current_quiz.finish()
+        self.memory.add_quiz_result(self.last_quiz_results)
         analysis = WeaknessAnalyzer.analyze_session(self.last_quiz_results)
         filename = self.data_manager.save_quiz_results(self.last_quiz_results, "gui")
         self._refresh_saved_files()
