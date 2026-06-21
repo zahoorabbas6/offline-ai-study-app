@@ -1,194 +1,266 @@
-# Offline AI Study Engine
+# Offline AI Study App
 
-A complete, production-ready offline AI study assistant that converts study materials into flashcards, predicted exam questions, practice quizzes, and weakness analysis—all running locally on your machine.
+A production-ready offline study assistant that turns PDFs, text files, Markdown, and raw notes into flashcards, predicted exam questions, quizzes, summaries, and weakness analysis. The app runs locally and can optionally use Ollama for stronger local AI output when Ollama is installed and running.
 
-## Features
+## What It Does
 
-✨ **Core Features:**
-- 📄 **Multi-format Input**: PDF, TXT, Markdown, or direct text entry
-- 🎯 **AI Flashcard Generation**: Automatically creates study flashcards from materials
-- 📝 **Exam Question Prediction**: Predicts likely exam questions with probability ranking
-- 🧪 **Practice Quizzes**: Generate interactive practice quizzes with difficulty scaling
-- 🎨 **Clean GUI**: Intuitive PySide interface for easy access to all features
-- 📱 **CLI Interface**: Command-line interface for automation and advanced usage
+- Reads PDF, TXT, Markdown, and pasted raw text
+- Generates flashcards from study material
+- Predicts likely exam questions with probability labels
+- Creates practice quizzes from flashcards or exam predictions
+- Tracks quiz results and weakness analysis
+- Saves study data locally
+- Detects Ollama automatically for enhanced local AI mode
+- Enables full GUI AI chat only when Ollama is available
+- Falls back safely to the built-in offline NLP system when Ollama is missing or fails
+
+## Local AI Mode
+
+The app checks Ollama on startup and before local AI requests.
+
+Detection flow:
+
+```text
+Check if Ollama is installed
+Check if Ollama is running at http://localhost:11434
+Check if at least one local model is available
+If all checks pass, enable Local AI Mode
+Otherwise, keep the app in offline fallback mode
+```
+
+When Local AI Mode is active, Ollama can enhance:
+
+- Flashcard generation
+- Exam question prediction
+- AI chat responses
+- Memory-aware study output
+
+When Local AI Mode is not active:
+
+- Flashcards still work
+- Quizzes still work
+- Exam prediction still works
+- Text extraction still works
+- The full AI chat feature is not enabled
+- The GUI shows this warning:
+
+```text
+Full AI Chat Feature requires Ollama to be installed and running locally.
+```
+
+## Full GUI AI Chat
+
+The PySide GUI includes a full AI chat tab only when Ollama is installed, running, and has a local model.
+
+Chat features:
+
+- Chat input box
+- Scrollable conversation history
+- Send button
+- Clear chat option
+- Study question answering
+- Flashcard requests from chat
+- Quiz requests from chat
+- Explanations based on uploaded PDF or text
+- Memory-aware responses
+
+Chat requests run in a background Qt worker thread so the GUI does not freeze while a local model is thinking.
+
+## Memory System
+
+The app stores learning memory locally in:
+
+```text
+study_data/study_memory.json
+```
+
+Memory can include:
+
+- Uploaded document summaries and metadata
+- Flashcard history
+- Quiz result history
+- Exam question history
+- Chat history, only when Ollama chat is active
+
+The memory system is defensive:
+
+- It auto-loads on startup
+- It persists between sessions
+- It is used as context for local AI prompts
+- If the memory file is corrupted, the app resets memory safely instead of crashing
+
+## Fallback Safety
+
+Every AI route follows this rule:
+
+```text
+Input -> Check Ollama status
+If Ollama is active -> use local AI with memory
+If Ollama is inactive or fails -> use offline fallback
+Always return a result or a clear message
+```
+
+The existing offline study tools remain available even without Ollama.
 
 ## System Requirements
 
-- **Python**: 3.8 or higher
-- **RAM**: 4GB minimum (8GB+ recommended)
-- **Disk Space**: 500MB for spaCy model and dependencies
-- **OS**: Windows, macOS, or Linux
+- Python 3.8 or higher
+- Windows, macOS, or Linux
+- 4 GB RAM minimum, 8 GB recommended
+- Optional: Ollama for enhanced local AI and chat
+- Optional: spaCy or transformer models for advanced local NLP
+
+The default NLP engine is a fast built-in offline rules engine, so downloading a spaCy model is not required for normal use.
 
 ## Installation
 
-### 1. Clone or Download the Project
-  1.Clone the repository
-  2.Install requirements 
-  ```bash
-pip install -r requirements
+### 1. Clone or Open the Project
+
+```bash
+cd Offline-AI-Study-App
 ```
 
+### 2. Create a Virtual Environment
 
-### 2. Create Virtual Environment (Recommended)
+Windows:
+
 ```bash
-# Windows
 python -m venv venv
 venv\Scripts\activate
+```
 
-# macOS/Linux
+macOS/Linux:
+
+```bash
 python3 -m venv venv
 source venv/bin/activate
 ```
 
 ### 3. Install Dependencies
+
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Download spaCy Model
+### 4. Optional: Enable Ollama Local AI
+
+Install Ollama from the official Ollama site, then run:
+
 ```bash
-python -m spacy download en_core_web_sm
+ollama serve
+ollama pull llama3.2
 ```
 
-This downloads the English NLP model (~40MB) required for text processing.
+Start the app after Ollama is running.
 
 ## Quick Start
 
-### GUI Mode (Default)
+### GUI Mode
+
 ```bash
 python main.py
 ```
 
-This launches the graphical interface with all features accessible through buttons and menus.
+The app defaults to the PySide GUI when available. If PySide is unavailable, it attempts the CustomTkinter GUI and then falls back to CLI mode.
 
-### CLI Interactive Mode
+### CLI Mode
+
 ```bash
 python main.py --cli
 ```
 
-Interactive command-line interface for power users.
+Use CLI mode for simple interactive workflows and automation.
 
 ## Project Structure
 
+```text
+Offline-AI-Study-App/
+|-- main.py              # App entry point, CLI, and core orchestration
+|-- gui_pyside.py        # Main PySide GUI with conditional AI chat
+|-- gui_custom.py        # CustomTkinter fallback GUI
+|-- gui.py               # Tkinter fallback GUI
+|-- local_ai.py          # Safe Ollama detection and request routing
+|-- memory_store.py      # Persistent safe local memory system
+|-- nlp_engine.py        # Built-in offline NLP and optional advanced NLP hooks
+|-- pdf_reader.py        # PDF/TXT/Markdown/raw text handling
+|-- flashcards.py        # Flashcard generation fallback engine
+|-- exam_predictor.py    # Exam question prediction fallback engine
+|-- quiz_generator.py    # Quiz sessions, scoring, and weakness analysis
+|-- utils.py             # Data persistence, text utilities, logging
+|-- requirements.txt     # Python dependencies
+|-- study_data/          # Saved outputs and memory, auto-created
+|-- README.md            # Project documentation
 ```
-offline-ai-study-engine/
-├── main.py                 # Entry point with CLI & orchestration
-├── gui.py                  # Tkinter GUI interface
-├── nlp_engine.py          # spaCy NLP processing pipeline
-├── pdf_reader.py          # PDF/TXT file handling
-├── flashcards.py          # Flashcard generation engine
-├── exam_predictor.py      # Exam question prediction
-├── quiz_generator.py      # Quiz creation & tracking
-├── utils.py               # Utility functions & helpers
-├── requirements.txt       # Python dependencies
-├── study_data/            # Saved flashcards & data (auto-created)
-└── README.md             # This file
-```
 
-## Module Details
+## Core Modules
 
-### 1. **utils.py** - Utilities & Helpers
-- `DataManager`: JSON data persistence
-- `TextCleaner`: Text normalization and cleaning
-- `TextAnalyzer`: Text statistics and metrics
-- `ConceptExtractor`: Basic concept extraction
-- `Logger`: Timestamped logging
+### `main.py`
 
-### 2. **pdf_reader.py** - File Input Handling
-- `FileReader`: Multi-format file reading (PDF, TXT, MD)
-- `TextInputHandler`: Direct text input validation
-- PDF extraction using PyPDF2
+- `StudyEngineCore`: Coordinates loading, generation, prediction, quiz creation, memory, and local AI routing
+- `CLIInterface`: Interactive command-line interface
+- GUI launch fallback chain
 
-### 3. **nlp_engine.py** - NLP Pipeline
-- `NLPEngine`: spaCy-based text processing
-  - Tokenization & sentence segmentation
-  - Named Entity Recognition (NER)
-  - POS tagging & lemmatization
-  - Noun phrase extraction
-  - Dependency parsing
-- `ConceptGraphBuilder`: Builds concept relationships
+### `local_ai.py`
 
-### 4. **flashcards.py** - Flashcard Generation
-- `Flashcard`: Individual card representation
-- `FlashcardGenerator`: Multi-strategy flashcard creation
-  - From explicit definitions
-  - From key concepts
-  - From sentence Q&A conversion
-- `FlashcardDeck`: Deck management with statistics
-- `Difficulty`: Easy/Medium/Hard classification
+- Detects whether Ollama is installed and running
+- Checks available local models
+- Sends safe non-streaming requests to Ollama
+- Parses AI-generated flashcards and exam questions
+- Returns `None` or fallback-safe messages on failure
 
-### 5. **exam_predictor.py** - Exam Question Prediction
-- `ExamQuestion`: Predicted question representation
-- `ExamPredictor`: Question prediction engine
-  - Definition questions
-  - Concept questions
-  - Multiple choice questions
-  - Short answer questions
-  - Probability ranking
-- `ExamPaperGenerator`: Complete practice exam creation
+### `memory_store.py`
 
-### 6. **quiz_generator.py** - Quiz Creation
-- `QuizSession`: Interactive quiz tracking
-  - Progress tracking
-  - Answer validation
-  - Session scoring
-- `QuizGenerator`: Quiz creation from various sources
-  - Flashcard quizzes
-  - Exam question quizzes
-  - Difficulty-based filtering
-- `WeaknessAnalyzer`: Performance analysis
-- `QuizRecommender`: Personalized study recommendations
+- Stores local learning memory as JSON
+- Adds document, flashcard, quiz, exam, and chat records
+- Builds compact memory context for local AI prompts
+- Handles missing or corrupted memory without crashing
 
-### 7. **gui.py** - Graphical Interface
-- `StudyAppGUI`: Main application window
-  - File upload & text input
-  - Real-time flashcard generation
-  - Exam question prediction display
-  - Quiz interface
-  - Statistics dashboard
-- `QuizUI`: Interactive quiz window
+### `gui_pyside.py`
 
-### 8. **main.py** - Orchestration & Entry Point
-- `StudyEngineCore`: Core engine coordinating all modules
-- `CLIInterface`: Command-line interface
-- Entry point with argument parsing
+- Main premium GUI
+- Study material input
+- Flashcard editor
+- Quiz panel
+- Saved study item browser
+- Conditional AI chat tab
+- Background worker thread for local AI chat
+
+### `nlp_engine.py`
+
+- Fast built-in offline rules engine
+- Text processing, summaries, concepts, keywords, and complexity metrics
+- Optional advanced local NLP support
 
 ## Usage Examples
 
-### Example 1: Generate Flashcards from PDF
+### Generate Flashcards From a PDF
 
-**GUI Method:**
-1. Click "Load PDF" button
-2. Select your PDF file
-3. Click "Generate Flashcards"
-4. Review generated cards in output panel
+GUI:
 
-**CLI Method:**
+1. Click `Load PDF`
+2. Select your PDF
+3. Click `Generate Flashcards`
+4. Review and edit generated cards
+
+CLI:
+
 ```bash
 python main.py --cli
-# Follow prompts to load PDF and generate flashcards
 ```
 
-**Python Script:**
+Python:
+
 ```python
 from main import StudyEngineCore
 
 engine = StudyEngineCore()
 engine.load_text("my_study_material.pdf")
 deck = engine.generate_flashcards(num_cards=50)
-
-# Export to JSON
 engine.export_flashcards()
 ```
 
-### Example 2: Predict Exam Questions
+### Predict Exam Questions
 
-**GUI Method:**
-1. Load study material
-2. Click "Predict Exam Questions"
-3. Review predictions sorted by probability
-
-**Python Script:**
 ```python
 from main import StudyEngineCore
 
@@ -196,242 +268,199 @@ engine = StudyEngineCore()
 engine.load_text("chemistry_notes.txt")
 questions = engine.predict_exam_questions(num_questions=20)
 
-# High probability questions only
-high_prob = [q for q in questions if q.probability.name == "HIGH"]
+high_probability = [
+    question for question in questions
+    if question.probability.name == "HIGH"
+]
 ```
 
-### Example 3: Create & Run a Quiz
+### Use Local AI Chat
 
-**GUI Method:**
-1. Generate flashcards (or predict exam questions)
-2. Click "Create Quiz"
-3. Answer questions interactively
-4. View score and recommendations
+1. Start Ollama.
+2. Pull at least one model.
+3. Run the app.
+4. Open the `AI Chat` tab in the GUI.
 
-**Python Script:**
+Example prompts:
+
+```text
+Explain this chapter in simpler terms.
+Create 10 flashcards from the uploaded material.
+Make a quiz about the weakest topics from my recent results.
+What exam questions are most likely from this PDF?
+```
+
+### Create a Quiz
+
+GUI:
+
+1. Generate flashcards or exam questions
+2. Open the `Quiz` tab
+3. Choose a source
+4. Click `Start Quiz`
+5. Answer questions and finish to save results
+
+Python:
+
 ```python
 from main import StudyEngineCore
-from quiz_generator import QuizGenerator, QuizDifficulty
+from quiz_generator import QuizGenerator
 
 engine = StudyEngineCore()
 engine.load_text("biology_notes.txt")
-deck = engine.generate_flashcards()
+deck = engine.generate_flashcards(num_cards=30)
 
-# Create intermediate difficulty quiz
-quiz = QuizGenerator.create_difficulty_based(
+quiz = QuizGenerator.create_from_flashcards(
     deck.cards,
-    difficulty=QuizDifficulty.INTERMEDIATE,
-    num_questions=10
-)
-
-# Run quiz programmatically
-# (GUI provides interactive experience)
-```
-
-### Example 4: Analyze Text Statistics
-
-**GUI Method:**
-1. Load study material
-2. Click "Text Statistics"
-3. View complexity metrics
-
-**Python Script:**
-```python
-from main import StudyEngineCore
-
-engine = StudyEngineCore()
-engine.load_text("lecture_notes.txt")
-engine.show_statistics()
-```
-
-## Advanced Usage
-
-### Custom Flashcard Generation
-
-```python
-from nlp_engine import NLPEngine
-from flashcards import FlashcardGenerator
-
-nlp = NLPEngine()
-generator = FlashcardGenerator(nlp)
-
-# Generate specific types
-definition_cards = generator.generate_from_definitions(text)
-concept_cards = generator.generate_from_concepts(text, max_cards=30)
-qa_cards = generator.generate_qa_from_sentences(text, max_cards=30)
-```
-
-### Topic-Based Quiz
-
-```python
-from quiz_generator import QuizGenerator
-
-# Create quiz for specific topic
-quiz = QuizGenerator.create_topic_based(
-    flashcards,
-    topic="photosynthesis",
-    num_questions=15
+    quiz_name="Biology Practice",
+    num_questions=10,
 )
 ```
 
-### Performance Analysis
+## Saved Data
 
-```python
-from quiz_generator import WeaknessAnalyzer
+Saved files are stored under `study_data/`.
 
-# Analyze quiz session
-results = quiz_session.finish()
-analysis = WeaknessAnalyzer.analyze_session(results)
-print(f"Performance: {analysis['performance_level']}")
-print(f"Recommendations: {analysis['recommendations']}")
-```
+Examples:
 
-## Configuration
+- `flashcards_gui_YYYYMMDD_HHMMSS.json`
+- `exam_predictions_gui_YYYYMMDD_HHMMSS.json`
+- `quiz_results_gui_YYYYMMDD_HHMMSS.json`
+- `study_memory.json`
 
-### NLP Model
-Edit `nlp_engine.py` to change the spaCy model:
-```python
-MODEL_NAME = "en_core_web_sm"  # or "en_core_web_md", "en_core_web_lg"
-```
-
-### Data Storage Location
-Edit `utils.py` to change where data is saved:
-```python
-def __init__(self, data_dir: str = "study_data"):
-    # Change "study_data" to your preferred directory
-```
-
-### Flashcard Generation Parameters
-```python
-# In main.py or FlashcardGenerator
-num_cards = 50  # Total flashcards to generate
-```
+The GUI hides `study_memory.json` from the saved item browser because it is internal app memory.
 
 ## Output Formats
 
-### Exported Flashcards (JSON)
+Flashcards:
+
 ```json
 {
-  "timestamp": "2024-06-16 10:30:45",
+  "timestamp": "20260621_120000",
+  "type": "flashcards",
   "cards": [
     {
       "question": "Define: Photosynthesis",
-      "answer": "The process by which plants...",
+      "answer": "Photosynthesis is the process by which plants convert light energy into chemical energy.",
       "tags": ["definition", "photosynthesis"],
       "difficulty": "MEDIUM",
-      "source": "Original sentence from text"
+      "source": "Original source sentence"
     }
   ]
 }
 ```
 
-### Quiz Results
+Quiz results:
+
 ```json
 {
-  "quiz_name": "Study Quiz",
+  "timestamp": "20260621_120000",
+  "type": "quiz_results",
+  "quiz_name": "Flashcard Practice",
   "total_questions": 10,
   "correct": 8,
   "incorrect": 2,
   "score_percentage": 80.0,
   "duration_seconds": 300,
-  "answers": [...]
+  "answers": []
 }
 ```
 
 ## Troubleshooting
 
-### spaCy Model Not Found
+### Full AI Chat Is Not Available
+
+Make sure Ollama is installed, running, and has a model:
+
 ```bash
-python -m spacy download en_core_web_sm
+ollama serve
+ollama list
+ollama pull llama3.2
 ```
 
-### PyPDF2 Not Installed
+Then restart the app.
+
+### Ollama Is Installed But Not Detected
+
+- Confirm `ollama` is available on your system PATH
+- Confirm the server is reachable at `http://localhost:11434`
+- Run `ollama list` to verify at least one local model exists
+
+### App Works But Uses Fallback Output
+
+This is expected when Ollama is inactive, unavailable, slow, or returns invalid JSON. The app keeps using the built-in offline generators.
+
+### PDF Reading Fails
+
+Install or update PyPDF2:
+
 ```bash
 pip install PyPDF2
 ```
 
-### GUI Not Starting
-- Ensure tkinter is installed: `pip install tk`
-- Try CLI mode: `python main.py --cli`
+Some scanned PDFs contain images instead of selectable text. OCR is not currently included.
 
-### Memory Issues on Low-End Devices
-- Generate fewer flashcards: `num_cards=25`
-- Use smaller spaCy model
-- Close other applications
+### GUI Does Not Start
 
-### Poor Flashcard Quality
-- Use longer, more detailed source material
-- Ensure text is properly formatted
-- Try different sections of material
+Install GUI dependencies:
+
+```bash
+pip install PySide6 customtkinter
+```
+
+Or use CLI mode:
+
+```bash
+python main.py --cli
+```
+
+### Memory File Is Corrupted
+
+The app should recover automatically. It may rename the corrupted memory file and start with fresh memory.
 
 ## Performance Tips
 
-1. **Optimal RAM Usage**: 4-8GB sufficient for most tasks
-2. **Processing Speed**: 
-   - Text: ~100k words processed in 10-30 seconds
-   - Flashcard generation: ~2-5 seconds per 50 cards
-3. **Storage**: Save frequently used decks to avoid regeneration
-4. **Batch Processing**: Generate multiple flashcard sets before creating quizzes
+- Use shorter excerpts for faster local AI generation.
+- Generate fewer flashcards on low-end devices.
+- Pull a smaller Ollama model if chat responses are slow.
+- Save useful flashcard decks instead of regenerating them repeatedly.
+- Keep Ollama running before launching the app if you want chat enabled immediately.
 
-## Limitations & Future Enhancements
+## Design Principles
 
-### Current Limitations
-- English language only
-- No internet connection required (fully offline)
-- Flashcards based on text extraction (no hallucinations)
-- Simple answer matching for quizzes
-
-### Future Enhancements
-- Multi-language support
-- Advanced fuzzy matching for quiz answers
-- Spaced repetition algorithm
-- ML-based difficulty estimation
-- Concept clustering visualization
-- Export to Anki format
-- Mobile companion app
-
-## Contributing
-
-This is a production-ready standalone application. For improvements:
-1. Test thoroughly before modifying core modules
-2. Maintain the modular architecture
-3. Keep all features offline
-4. Add type hints to new code
-5. Include comprehensive docstrings
-
-## License
-
-Open source project - use freely for personal/educational purposes.
-
-## Credits
-
-Built with:
-- **spaCy**: Advanced NLP
-- **PyPDF2**: PDF processing
-- **Tkinter**: GUI framework
-- **Python 3.8+**
-
-## Contact & Support
-
-For issues or questions:
-1. Check the troubleshooting section
-2. Review module docstrings
-3. Test with sample text files first
+- Offline-first
+- Local data ownership
+- Optional local AI enhancement
+- No crash on missing Ollama
+- No crash on memory corruption
+- Existing fallback study tools remain functional
+- GUI chat is conditional, not a hard dependency
 
 ## Changelog
 
-### Version 1.0 (Initial Release)
-- Complete offline AI study engine
-- 8 core modules fully integrated
-- GUI and CLI interfaces
+### Final Upgraded Version
+
+- Added Ollama local AI detection
+- Added safe AI routing with fallback
+- Added persistent local memory
+- Added conditional PySide GUI AI chat
+- Added background chat worker to avoid GUI freezing
+- Preserved existing flashcard, quiz, exam, and extraction tools
+
+### Initial Release
+
+- Offline study engine
+- PDF/TXT/raw text input
 - Flashcard generation
 - Exam question prediction
-- Quiz system with scoring
+- Quiz system
 - Weakness analysis
-- Production-ready code
+- GUI and CLI interfaces
 
-### Author
-**Zahoor Abbas**
+## Author
+
+Zahoor Abbas
+
 ---
 
-**Happy studying! 📚✨**
+Happy studying!
